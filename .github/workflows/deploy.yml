@@ -55,6 +55,3 @@ jobs:
 
       - name: Terraform Plan
         run: terraform plan -var="key_name=cloudengineer"
-
-      - name: Terraform Apply
-        run: terraform apply -auto-approve -var="key_name=cloudengineer"
