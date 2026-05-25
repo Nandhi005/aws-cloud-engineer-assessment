@@ -23,9 +23,9 @@ variable "private_subnet_2" {
 }
 
 variable "instance_type" {
-  default = "t3.micro"
+  default = "t2.micro"
 }
 
 variable "key_name" {
-  description = "EC2 Key Pair Name"
+  description = "cloudengineer"
 }
