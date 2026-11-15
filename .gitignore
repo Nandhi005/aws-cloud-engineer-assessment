@@ -1,5 +1,26 @@
+# Terraform working files
 .terraform/
 *.tfstate
-*.tfstate.backup
-terraform.tfvars
-cloudengineer.pem
+*.tfstate.*
+*.tfplan
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Terraform variable files (keep examples only)
+*.tfvars
+!*.tfvars.example
+
+# Credentials and private keys
+*.pem
+*.key
+.env
+.env.*
+
+# Local tooling
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
