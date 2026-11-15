@@ -1,286 +1,163 @@
-# AWS Cloud Engineer Assessment
+# AWS Cloud Infrastructure Automation with Terraform
 
-## Project Overview
+A hands-on AWS infrastructure project that provisions a Dockerized web application behind an Application Load Balancer (ALB), with an EC2 Auto Scaling Group and a GitHub Actions workflow for image publishing and Terraform validation/planning.
 
-This project demonstrates a production-like cloud infrastructure deployment for a Dockerized web application on AWS using Terraform Infrastructure as Code (IaC). The architecture is designed with scalability, high availability, security, automation, and monitoring best practices.
+> **Implementation note:** This repository is an infrastructure assessment/lab. The workflow currently builds and pushes the Docker image and runs `terraform init`, `terraform validate`, and `terraform plan`. It does **not** run `terraform apply` or perform an automated production deployment.
 
-The solution includes:
+## Architecture
 
-- Dockerized web application
-- Terraform-managed AWS infrastructure
-- Application Load Balancer (ALB)
-- Auto Scaling Group (ASG)
-- Multi-Availability Zone deployment
-- CI/CD automation using GitHub Actions
-- AWS CloudWatch monitoring
+![AWS architecture](architecture-diagram.png)
 
----
+The Terraform configuration currently defines:
 
-# Architecture Diagram
+- A custom VPC with DNS support and hostnames enabled.
+- Two public subnets across the first two available Availability Zones.
+- Two private subnets (created, but not currently used by the Auto Scaling Group).
+- An Internet Gateway and public route table.
+- An internet-facing Application Load Balancer in the public subnets.
+- An EC2 Launch Template and Auto Scaling Group.
+- A target group with an HTTP health check on `/`.
+- Security groups allowing HTTP from the ALB to EC2.
 
-![Architecture](architecture-diagram.png)
+**Current network placement:** The Auto Scaling Group is configured to launch EC2 instances in the two public subnets. The private subnets are provisioned but are not yet connected to a private route table/NAT design or used by the application instances.
 
----
-
-# Technologies Used
+## Technology stack
 
 | Technology | Purpose |
 |---|---|
-| AWS EC2 | Compute instances |
-| AWS VPC | Network isolation |
-| AWS ALB | Traffic distribution |
-| AWS Auto Scaling | High availability and scaling |
+| AWS VPC, subnets, Internet Gateway | Network foundation |
+| EC2 Launch Template | Instance configuration |
+| Auto Scaling Group | Maintain and scale EC2 capacity |
+| Application Load Balancer | Distribute HTTP traffic |
+| Security Groups | Restrict inbound network access |
 | Terraform | Infrastructure as Code |
-| Docker | Application containerization |
-| GitHub Actions | CI/CD pipeline |
-| CloudWatch | Monitoring and metrics |
+| Docker | Package the static web application |
+| Docker Hub | Store the application image |
+| GitHub Actions | Build/push image and validate/plan infrastructure |
+| CloudWatch / AWS metrics | Platform metrics available for operational monitoring |
 
----
-
-# Infrastructure Components
-
-## Networking
-
-- Custom VPC
-- Internet Gateway
-- Public subnets across multiple Availability Zones
-- Route tables and associations
-- Security groups
-
-## Compute
-
-- EC2 instances running Docker containers
-- Launch Template
-- Auto Scaling Group
-
-## Load Balancing
-
-- Application Load Balancer (ALB)
-- Target Groups
-- Health Checks
-
-## Monitoring
-
-- AWS CloudWatch metrics
-- EC2 monitoring
-- ALB monitoring
-- Auto Scaling monitoring
-
-## CI/CD
-
-- Automated GitHub Actions workflow
-- Docker image build and push
-- Terraform validation and planning
-
----
-
-# Architecture Design
-
-## High Availability
-
-The application is deployed across multiple Availability Zones to ensure fault tolerance and service availability during infrastructure failures.
-
-## Scalability
-
-An Auto Scaling Group dynamically manages EC2 instances based on infrastructure demand.
-
-## Security
-
-- Security Groups restrict unnecessary inbound traffic
-- ALB handles public traffic
-- EC2 instances are protected behind the load balancer
-- Sensitive files such as `.pem`, `.tfstate`, and `terraform.tfvars` are excluded from version control
-
-## Infrastructure as Code
-
-Terraform is used to provision and manage all AWS infrastructure resources consistently and reproducibly.
-
----
-
-# CI/CD Pipeline
-
-GitHub Actions is used to automate deployment workflows.
-
-## Pipeline Stages
+## Repository layout
 
 ```text
-Code Push
-   ↓
-GitHub Actions
-   ↓
-Docker Image Build
-   ↓
-Docker Image Push
-   ↓
-Terraform Init
-   ↓
-Terraform Validate
-   ↓
-Terraform Plan
-```
-
-The pipeline validates infrastructure changes before deployment to prevent unintended modifications.
-
----
-
-# Monitoring Implementation
-
-Basic monitoring is implemented using AWS CloudWatch.
-
-## Metrics Monitored
-
-- EC2 CPU utilization
-- Network traffic
-- ALB request count
-- ALB target health
-- Auto Scaling Group health
-
-CloudWatch dashboards and metrics provide operational visibility into infrastructure health and application availability.
-
----
-
-# Repository Structure
-
-```text
-aws-cloud-engineer-assessment/
-│
-├── .github/
-│   └── workflows/
-│       └── deploy.yml
-│
+.
+├── .github/workflows/deploy.yml
 ├── app/
 │   ├── Dockerfile
 │   └── index.html
-│
 ├── terraform/
 │   ├── main.tf
 │   ├── provider.tf
 │   ├── variables.tf
 │   ├── outputs.tf
-│   └── userdata.sh
-│
+│   ├── userdata.sh
+│   └── .terraform.lock.hcl
 ├── architecture-diagram.png
-├── README.md
-└── .gitignore
+└── README.MD
 ```
-
----
-
-# Deployment Instructions
 
 ## Prerequisites
 
-Install the following tools:
+- AWS account and permissions to create the resources defined in `terraform/main.tf`.
+- AWS CLI configured locally, or credentials available through the GitHub Actions secrets.
+- Terraform 1.x.
+- Docker.
+- An EC2 key pair in the selected AWS region if you intend to use SSH.
+- A Docker Hub account/repository accessible to the workflow.
 
-- AWS CLI
-- Terraform
-- Docker
-- Git
+The default AWS region is `ap-south-1` (Mumbai). The EC2 key pair name is supplied through the required `key_name` Terraform variable.
 
-Configure AWS credentials:
+## Run the application container locally
+
+From the repository root:
 
 ```bash
-aws configure
+docker build -t cloud-app:local ./app
+docker run --rm -p 8080:80 cloud-app:local
 ```
 
----
+Open `http://localhost:8080`.
 
-# Terraform Deployment
+## Validate and plan the infrastructure
 
-Navigate to Terraform directory:
+From the repository root:
 
 ```bash
 cd terraform
-```
-
-Initialize Terraform:
-
-```bash
 terraform init
-```
-
-Validate Terraform configuration:
-
-```bash
+terraform fmt -check
 terraform validate
+terraform plan \
+  -var="key_name=YOUR_EC2_KEY_PAIR_NAME" \
+  -var="ssh_allowed_cidr=YOUR_PUBLIC_IP/32"
 ```
 
-Preview infrastructure changes:
+Review the plan carefully before applying any infrastructure changes. To provision resources manually after review:
 
 ```bash
-terraform plan
+terraform apply \
+  -var="key_name=YOUR_EC2_KEY_PAIR_NAME" \
+  -var="ssh_allowed_cidr=YOUR_PUBLIC_IP/32"
 ```
 
-Deploy infrastructure:
+The ALB DNS name is exposed as the `load_balancer_dns` output:
 
 ```bash
-terraform apply
+terraform output load_balancer_dns
 ```
 
----
-
-# Docker Deployment
-
-Build Docker image:
+To remove lab resources when they are no longer needed:
 
 ```bash
-docker build -t cloud-app .
+terraform destroy \
+  -var="key_name=YOUR_EC2_KEY_PAIR_NAME" \
+  -var="ssh_allowed_cidr=YOUR_PUBLIC_IP/32"
 ```
 
-Run container locally:
+Check the plan before confirming destroy. AWS resources can incur charges while running.
 
-```bash
-docker run -p 80:80 cloud-app
-```
+## GitHub Actions configuration
 
----
+The workflow in `.github/workflows/deploy.yml` runs on pushes to `main`. Configure these repository Actions secrets:
 
-# Cost Optimization
-
-The following cost optimization strategies were considered:
-
-- Usage of Free Tier eligible EC2 instances (`t2.micro`)
-- Auto Scaling prevents over-provisioning
-- Lightweight Dockerized application
-- Infrastructure automation reduces operational overhead
-- Native AWS monitoring services used instead of third-party tools
-
----
-
-# Trade-Offs Considered
-
-| Decision | Trade-Off |
+| Secret | Purpose |
 |---|---|
-| Public subnet deployment for EC2 | Simplified implementation for assessment |
-| GitHub Actions pipeline stops at Terraform Plan | Prevents unintended infrastructure changes |
-| Native CloudWatch monitoring | Simpler and cost-effective monitoring solution |
+| `AWS_ACCESS_KEY_ID` | IAM access key used by the workflow |
+| `AWS_SECRET_ACCESS_KEY` | IAM secret access key |
+| `DOCKER_USERNAME` | Docker Hub username |
+| `DOCKER_PASSWORD` | Docker Hub access token/password |
 
----
+The current workflow:
+1. Checks out the repository.
+2. Configures AWS credentials in `ap-south-1`.
+3. Logs in to Docker Hub.
+4. Builds and pushes `nandheeswaran/cloud-app:v1`.
+5. Runs Terraform init, validate and plan.
 
-# Future Improvements
+**It stops at Terraform Plan.** Review and apply infrastructure changes manually. For a stronger production workflow, prefer GitHub OIDC with an IAM role over long-lived AWS access keys, add pull-request validation, and require approval before any apply stage.
 
-Potential enhancements include:
+## Security and design considerations
 
-- Private subnet deployment for EC2 instances
-- Remote Terraform backend using S3 and DynamoDB
-- HTTPS with ACM certificates
-- Blue/Green deployment strategy
-- AWS WAF integration
-- Container orchestration using Amazon EKS
-- Centralized logging solution
+- SSH ingress is restricted by the `ssh_allowed_cidr` variable. Set it to your own public IP in CIDR form (for example, `203.0.113.10/32`); do not open SSH to `0.0.0.0/0`.
+- The ALB currently listens on HTTP port 80. HTTPS with ACM is a future enhancement.
+- EC2 instances currently launch in public subnets. A production design should move application instances into private subnets and provide controlled outbound access (for example, NAT or suitable VPC endpoints).
+- The private subnets are declared but are not yet used by the Auto Scaling Group.
+- Terraform state files, variable files, private keys and credentials must never be committed.
+- Use least-privilege IAM permissions and rotate credentials if they are ever exposed.
 
----
+## Roadmap
 
-# Security Best Practices
+- [ ] Move EC2 instances into private subnets and implement the required egress design.
+- [ ] Add HTTPS using ACM and an HTTPS ALB listener.
+- [ ] Replace long-lived AWS keys in Actions with GitHub OIDC.
+- [ ] Add PR checks for formatting, validation and plan review.
+- [ ] Add explicit CloudWatch alarms and an operational dashboard.
+- [ ] Add deployment/rollback strategy and tested health checks.
+- [ ] Parameterize image repository and tag rather than hard-coding them.
 
-- Infrastructure managed using Terraform
-- Sensitive files excluded using `.gitignore`
-- Least privilege security group access
-- CI/CD secrets stored securely in GitHub Secrets
-- Docker containerization improves workload isolation
+## Author
 
----
+**Nandheeswaran M** — DevOps / Cloud Engineering
 
-# Conclusion
-
-This project demonstrates a scalable and production-oriented AWS cloud infrastructure using modern DevOps practices including Infrastructure as Code, CI/CD automation, containerization, load balancing, auto scaling, and monitoring.
+- [GitHub](https://github.com/Nandhi005)
+- [LinkedIn](https://www.linkedin.com/in/nandheeswaran-m-09a8a6244/)
+- [Portfolio](https://nandhi005.github.io/Nandhe_Portfolio/)
