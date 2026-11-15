@@ -125,11 +125,13 @@ resource "aws_security_group" "ec2_sg" {
     security_groups = [aws_security_group.alb_sg.id]
   }
 
+  # Restrict SSH to a trusted source CIDR.
   ingress {
+    description = "SSH from trusted administrator CIDR"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = [var.ssh_allowed_cidr]
   }
 
   egress {
@@ -210,6 +212,8 @@ resource "aws_autoscaling_group" "app_asg" {
   max_size         = 4
   min_size         = 2
 
+  # Current implementation places instances in public subnets.
+  # Move to private subnets after adding the required private egress design.
   vpc_zone_identifier = [
     aws_subnet.public_1.id,
     aws_subnet.public_2.id
